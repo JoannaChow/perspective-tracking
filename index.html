@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title></title>	
+</head>
+<body>
+	<style>
+		html, body {
+			height: 100%;
+		}
+		body {
+			overflow:hidden;
+			margin: 0;
+			position: relative;
+			font-family: sans-serif;
+		}
+
+		canvas { width: 100%; height: 100% }
+
+		.loading-screen {
+			width: 100%;
+			height: 100%;
+		}
+
+		.loading {
+			position: absolute;
+			left: 50%;
+			top: 50%;
+			animation: rotate 3s ease infinite; 
+		}
+
+		@keyframes rotate {
+		  0%{
+		  	transform: translate(-50%, -50%) rotate(0deg);
+		  }
+		  100% {
+		  	transform: translate(-50%, -50%) rotate(360deg);
+		  }
+		}
+
+		.fps {
+			text-align: right;
+			position: absolute;
+			top: 10px;
+			right: 10px;
+		}
+
+		#video-container {
+			display:none;
+		}
+	</style>
+	<script src='./face-api.js'/></script>
+	<script src='./three.js'/></script>
+	<script src='./TeapotBufferGeometry.js'></script>
+	<script src='./drawTeapot.js'></script>
+	<div id="video-container">
+		<video id="video-element" width="800" height="600" autoplay></video>
+	</div>
+	
+	<div class="loading-screen">
+		<img class="loading" src='./loading.png'>
+	</div>
+
+	<span class="fps"></span>
+	<script>
+		const videoElem = document.getElementById('video-element');
+		const fpsElem = document.getElementsByClassName('fps')[0];
+		videoElem.setAttribute('width', window.innerWidth);
+		videoElem.setAttribute('height', window.innerHeight);
+
+		const INPUT_SIZE = 512;
+		const SCORE_THRESHOLD = 0.3;
+		const faceapiOption = new faceapi.TinyFaceDetectorOptions({ INPUT_SIZE, SCORE_THRESHOLD });
+
+		function hasGetUserMedia() {
+			return !!(navigator.mediaDevices &&
+				navigator.mediaDevices.getUserMedia);
+		}
+
+		let fps = 0;
+		let frameCounter = 0;
+		let lastTime = performance.now();
+
+		function updateFrameRate() {
+			const currTime = performance.now();
+			frameCounter++;
+			// update fps every second
+			if ((currTime - lastTime) > 1000) {
+				fps = Math.round(frameCounter * 1000 / (currTime - lastTime));
+				frameCounter = 0;
+				fpsElem.innerHTML = `FPS:\t${fps}`;
+				lastTime = performance.now();
+			}
+		}
+
+		function run() {
+			updateFrameRate();
+			
+			const resultsPromise = faceapi.detectSingleFace(videoElem, faceapiOption);
+			const timeoutPromise = new Promise(resolve => setTimeout(resolve, 1000));
+
+			Promise.race([resultsPromise, timeoutPromise]).then(results => {
+				if (results){
+					moveCamera(results);
+					const loading = document.getElementsByClassName('loading-screen')[0];
+					if(loading) loading.remove();
+				}
+				requestAnimationFrame(run);
+			});
+		}
+
+		async function start() {
+			if (!videoElem.srcObject)
+				return;
+			await faceapi.loadSsdMobilenetv1Model('/models');
+			await faceapi.loadTinyFaceDetectorModel('/models');
+
+			run();
+		}
+
+		if (hasGetUserMedia()) {
+			const videoElem = document.getElementById('video-element');
+		 	navigator.mediaDevices.getUserMedia({video: true})
+		  		.then(function(stream) {
+		    		videoElem.srcObject = stream;
+		    		start();
+		  		});
+		} else {
+		  alert('getUserMedia() is not supported by your browser');
+		}
+	</script>
+</body>
+</html>
